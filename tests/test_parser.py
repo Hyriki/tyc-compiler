@@ -262,8 +262,9 @@ def test_040():
 
 
 def test_041():
-    """While without braces"""
-    source = "void main() { while (1) return; }"
+    """Empty struct literal usage"""
+    # This ensures {} is parsed as struct literal, not a block, in assignment
+    source = "struct P { int x; }; void main() { P p = {}; }"
     assert_parse_success(source)
 
 
@@ -466,8 +467,9 @@ def test_073():
 
 
 def test_074():
-    """Continue missing semicolon"""
-    source = "void main() { while (1) { continue } }"
+    """Stray semicolon (Empty statement not allowed)"""
+    # Spec: ';' by itself does not constitute a valid statement
+    source = "void main() { ; }"
     assert_parse_error(source)
 
 
@@ -610,8 +612,8 @@ def test_096():
 
 
 def test_097():
-    """Duplicate default labels in switch"""
-    # Spec: At most one default clause is allowed
+    """Malformed default label (default followed by expr)"""
+    # Spec: default must be followed immediately by colon, not an expression
     source = "void main() { switch (x) { default 1: break; } }"
     assert_parse_error(source)
 

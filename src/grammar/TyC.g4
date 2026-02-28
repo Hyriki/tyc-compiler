@@ -8,16 +8,19 @@ from lexererr import *
 def emit(self):
     tk = self.type
     if tk == self.UNCLOSE_STRING:       
-        result = super().emit();
-        raise UncloseString(result.text);
+        result = super().emit()
+        value = result.text[1:] 
+        if value and value[-1] in ('\n', '\r'):
+            value = value[:-1]  
+        raise UncloseString(value)
     elif tk == self.ILLEGAL_ESCAPE:
-        result = super().emit();
-        raise IllegalEscape(result.text);
+        result = super().emit()
+        raise IllegalEscape(result.text[1:]) 
     elif tk == self.ERROR_CHAR:
-        result = super().emit();
-        raise ErrorToken(result.text); 
+        result = super().emit()
+        raise ErrorToken(result.text) 
     else:
-        return super().emit();
+        return super().emit()
 }
 
 options{
@@ -122,7 +125,7 @@ expr:
 	| <assoc = right> expr ASSIGN expr # AssignmentExpr;
 
 //================= Lexer Rules =================//
-WS: [ \t\r\n]+ -> skip; // skip spaces, tabs
+WS: [ \t\r\n\f]+ -> skip; // skip spaces, tabs
 
 // Comments
 LINE_COMMENT: '//' ~[\r\n]* -> skip;
@@ -151,8 +154,6 @@ LPAREN: '(';
 RPAREN: ')';
 LBRACE: '{';
 RBRACE: '}';
-// LBRACK: '[';
-// RBRACK: ']';
 SEMI: ';';
 COMMA: ',';
 COLON: ':';
@@ -188,15 +189,17 @@ FLOAT_T:
 	| '.' [0-9]+ EXPONENT?
 	| [0-9]+ EXPONENT;
 
-fragment ESC_SEQ: '\\' [bfrnt"\\];
-
-// Valid String
-STRING_T: '"' (ESC_SEQ | ~["\\\r\n])* '"';
-
 // Identifiers
 IDENTIFIER: [a-zA-Z_][a-zA-Z0-9_]*;
 
+// Valid String
+STRING_T: '"' STRING_CONTENT* '"' { self.text = self.text[1:-1] };
+
 // Error Handling (Order matters)
-ILLEGAL_ESCAPE: '"' (ESC_SEQ | ~["\\\r\n])* '\\' ~[bfrnt"\\] (~["\r\n])* '"';
-UNCLOSE_STRING: '"' (ESC_SEQ | ~["\\\r\n])* ([\r\n] | EOF);
+ILLEGAL_ESCAPE: '"' STRING_CONTENT* '\\' ~[bfrnt\\"\r\n];
+UNCLOSE_STRING: '"' STRING_CONTENT* ([\r\n] | EOF);
+
+// Fragments
+fragment STRING_CONTENT: ESC_SEQ | [\u0000-\u0009\u000B\u000C\u000E-\u0021\u0023-\u005B\u005D-\u00FF];
+fragment ESC_SEQ: '\\' [bfrnt\\"];
 ERROR_CHAR: .;

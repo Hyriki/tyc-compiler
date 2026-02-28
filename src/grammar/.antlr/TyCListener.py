@@ -179,12 +179,12 @@ class TyCListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by TyCParser#blockBody.
-    def enterBlockBody(self, ctx:TyCParser.BlockBodyContext):
+    # Enter a parse tree produced by TyCParser#blockStm.
+    def enterBlockStm(self, ctx:TyCParser.BlockStmContext):
         pass
 
-    # Exit a parse tree produced by TyCParser#blockBody.
-    def exitBlockBody(self, ctx:TyCParser.BlockBodyContext):
+    # Exit a parse tree produced by TyCParser#blockStm.
+    def exitBlockStm(self, ctx:TyCParser.BlockStmContext):
         pass
 
 
