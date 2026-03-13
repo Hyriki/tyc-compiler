@@ -71,7 +71,7 @@ statement:
 	| blockStm												# BlockStmt
 	| IF LPAREN expr RPAREN statement (ELSE statement)?		# IfStmt
 	| WHILE LPAREN expr RPAREN statement					# WhileStmt
-	| FOR LPAREN forInit expr? SEMI expr? RPAREN statement	# ForStmt
+	| FOR LPAREN forInit cond=expr? SEMI update=expr? RPAREN statement	# ForStmt
 	| SWITCH LPAREN expr RPAREN LBRACE caseBlock* RBRACE	# SwitchStmt
 	| RETURN expr? SEMI										# ReturnStmt
 	| BREAK SEMI											# BreakStmt

@@ -1,4 +1,4 @@
-# Generated from e:/Study Files/Github/tyc-compiler/src/grammar/TyC.g4 by ANTLR 4.13.1
+# Generated from /Users/hyriki/Documents/GitHub/tyc-compiler/src/grammar/TyC.g4 by ANTLR 4.13.1
 # encoding: utf-8
 from antlr4 import *
 from io import StringIO
@@ -1262,6 +1262,8 @@ class TyCParser ( Parser ):
 
         def __init__(self, parser, ctx:ParserRuleContext): # actually a TyCParser.StatementContext
             super().__init__(parser)
+            self.cond = None # ExprContext
+            self.update = None # ExprContext
             self.copyFrom(ctx)
 
         def FOR(self):
@@ -1379,7 +1381,7 @@ class TyCParser ( Parser ):
                 _la = self._input.LA(1)
                 if (((_la) & ~0x3f) == 0 and ((1 << _la) & 535462570622976) != 0):
                     self.state = 161
-                    self.expr(0)
+                    localctx.cond = self.expr(0)
 
 
                 self.state = 164
@@ -1389,7 +1391,7 @@ class TyCParser ( Parser ):
                 _la = self._input.LA(1)
                 if (((_la) & ~0x3f) == 0 and ((1 << _la) & 535462570622976) != 0):
                     self.state = 165
-                    self.expr(0)
+                    localctx.update = self.expr(0)
 
 
                 self.state = 168

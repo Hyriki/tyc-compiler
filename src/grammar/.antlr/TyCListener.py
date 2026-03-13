@@ -1,4 +1,4 @@
-# Generated from e:/Study Files/Github/tyc-compiler/src/grammar/TyC.g4 by ANTLR 4.13.1
+# Generated from /Users/hyriki/Documents/GitHub/tyc-compiler/src/grammar/TyC.g4 by ANTLR 4.13.1
 from antlr4 import *
 if "." in __name__:
     from .TyCParser import TyCParser
