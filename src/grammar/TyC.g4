@@ -48,7 +48,6 @@ literal:
 	| STRING_T		# StringLiteral
 	| structLiteral	# StructLiteralExpr;
 
-functionCall: IDENTIFIER LPAREN argList? RPAREN;
 argList: expr (COMMA expr)*;
 
 // 4. Struct Declaration
@@ -71,8 +70,8 @@ statement:
 	| blockStm												# BlockStmt
 	| IF LPAREN expr RPAREN statement (ELSE statement)?		# IfStmt
 	| WHILE LPAREN expr RPAREN statement					# WhileStmt
-	| FOR LPAREN forInit cond=expr? SEMI update=expr? RPAREN statement	# ForStmt
-	| SWITCH LPAREN expr RPAREN LBRACE caseBlock* RBRACE	# SwitchStmt
+	| FOR LPAREN forInit expr? SEMI updater? RPAREN statement	# ForStmt
+	| SWITCH LPAREN expr RPAREN LBRACE caseBlock* defaultBlock? RBRACE	# SwitchStmt
 	| RETURN expr? SEMI										# ReturnStmt
 	| BREAK SEMI											# BreakStmt
 	| CONTINUE SEMI											# ContinueStmt
@@ -80,49 +79,95 @@ statement:
 
 // Helpers
 varDecl: (type | AUTO) IDENTIFIER (ASSIGN expr)? SEMI;
-forInit: varDecl | expr SEMI | SEMI;
-caseBlock: (CASE expr | DEFAULT) COLON statement*;
+forInit: varDecl | assignExprHelper SEMI| SEMI;
+caseBlock: CASE expr COLON statement*;
+defaultBlock: DEFAULT COLON statement*;
+assignExprHelper: assignLhs ASSIGN expr;
+updater: assignExprHelper | incDecHelper;
+incDecHelper:
+    assignLhs (INC | DEC)
+    | (INC | DEC) assignLhs;
+
 
 // 7. Expressions
-expr:
-	// --- Priority 0: Atoms ---
-	IDENTIFIER				# IdentifierExpr
-	| literal				# LiteralExpr
-	| functionCall			# FunctionCallExpr
-	| LPAREN expr RPAREN	# ParenExpr
+// expr:
+// 	// --- Priority 0: Atoms ---
+// 	IDENTIFIER				# IdentifierExpr
+// 	| literal				# LiteralExpr
+// 	| functionCall			# FunctionCallExpr
+// 	| LPAREN expr RPAREN	# ParenExpr
 
-	// --- Priority 1: Member Access (.) [Left Associative] ---
-	| expr MEMBER IDENTIFIER # MemberAccessExpr
+// 	// --- Priority 1: Member Access (.) [Left Associative] ---
+// 	| expr MEMBER IDENTIFIER # MemberAccessExpr
 
-	// --- Priority 2: Postfix (++ --) [Left Associative] ---
-	| expr (INC | DEC) # PostfixExpr
+// 	// --- Priority 2: Postfix (++ --) [Left Associative] ---
+// 	| expr (INC | DEC) # PostfixExpr
 
-	// --- Priority 3: Prefix (++ --) [Right Associative] ---
-	| <assoc = right> (INC | DEC) expr # PrefixExpr
+// 	// --- Priority 3: Prefix (++ --) [Right Associative] ---
+// 	| <assoc = right> (INC | DEC) expr # PrefixExpr
 
-	// --- Priority 4: Unary (! - +) [Right Associative] ---
-	| <assoc = right> (NOT | SUB | ADD) expr # UnaryExpr
+// 	// --- Priority 4: Unary (! - +) [Right Associative] ---
+// 	| <assoc = right> (NOT | SUB | ADD) expr # UnaryExpr
 
-	// --- Priority 5: Multiplicative (* / %) [Left Associative] ---
-	| expr (MUL | DIV | MOD) expr # MultiplicativeExpr
+// 	// --- Priority 5: Multiplicative (* / %) [Left Associative] ---
+// 	| expr (MUL | DIV | MOD) expr # MultiplicativeExpr
 
-	// --- Priority 6: Additive (+ -) [Left Associative] ---
-	| expr (ADD | SUB) expr # AdditiveExpr
+// 	// --- Priority 6: Additive (+ -) [Left Associative] ---
+// 	| expr (ADD | SUB) expr # AdditiveExpr
 
-	// --- Priority 7: Relational (< <= > >=) [Left Associative] ---
-	| expr (LT | GT | LEQ | GEQ) expr # RelationalExpr
+// 	// --- Priority 7: Relational (< <= > >=) [Left Associative] ---
+// 	| expr (LT | GT | LEQ | GEQ) expr # RelationalExpr
 
-	// --- Priority 8: Equality (== !=) [Left Associative] ---
-	| expr (EQ | NEQ) expr # EqualityExpr
+// 	// --- Priority 8: Equality (== !=) [Left Associative] ---
+// 	| expr (EQ | NEQ) expr # EqualityExpr
 
-	// --- Priority 9: Logical AND (&&) [Left Associative] ---
-	| expr AND expr # LogicalAndExpr
+// 	// --- Priority 9: Logical AND (&&) [Left Associative] ---
+// 	| expr AND expr # LogicalAndExpr
 
-	// --- Priority 10: Logical OR (||) [Left Associative] ---
-	| expr OR expr # LogicalOrExpr
+// 	// --- Priority 10: Logical OR (||) [Left Associative] ---
+// 	| expr OR expr # LogicalOrExpr
 
-	// --- Priority 11: Assignment (=) [Right Associative] ---
-	| <assoc = right> expr ASSIGN expr # AssignmentExpr;
+// 	// --- Priority 11: Assignment (=) [Right Associative] ---
+// 	| <assoc = right> IDENTIFIER ASSIGN expr # AssignmentExpr
+// 	| <assoc = right> expr MEMBER IDENTIFIER ASSIGN expr # MemberAssignmentExpr;
+expr: assignExpr;
+
+assignExpr: assignLhs ASSIGN assignExpr # AssignOp
+          | logicalOrExpr # AssignPass;
+
+assignLhs: IDENTIFIER # AssignId
+         | postfixExpr MEMBER IDENTIFIER # AssignMember;
+
+logicalOrExpr: logicalOrExpr OR logicalAndExpr # OrOp
+             | logicalAndExpr # OrPass;
+
+logicalAndExpr: logicalAndExpr AND equalityExpr # AndOp
+              | equalityExpr # AndPass;
+
+equalityExpr: equalityExpr op=(EQ | NEQ) relationalExpr # EqOp
+            | relationalExpr # EqPass;
+
+relationalExpr: relationalExpr op=(LT | GT | LEQ | GEQ) additiveExpr # RelOp
+              | additiveExpr # RelPass;
+
+additiveExpr: additiveExpr op=(ADD | SUB) multiplicativeExpr # AddOp
+            | multiplicativeExpr # AddPass;
+
+multiplicativeExpr: multiplicativeExpr op=(MUL | DIV | MOD) unaryExpr # MulOp
+                  | unaryExpr # MulPass;
+
+unaryExpr: op=(ADD | SUB | NOT) unaryExpr # UnaryOp
+         | op=(INC | DEC) unaryExpr # PrefixOp
+         | postfixExpr # UnaryPass;
+
+postfixExpr: postfixExpr op=(INC | DEC) # PostfixOp
+           | postfixExpr MEMBER IDENTIFIER # MemberAccessOp
+           | primaryExpr # PostfixPass;
+
+primaryExpr: LPAREN expr RPAREN # ParenOp
+           | literal # LiteralOp
+           | IDENTIFIER LPAREN argList? RPAREN # FuncCallOp
+           | IDENTIFIER # IdOp;
 
 //================= Lexer Rules =================//
 WS: [ \t\r\n\f]+ -> skip; // skip spaces, tabs

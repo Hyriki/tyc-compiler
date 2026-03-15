@@ -50,10 +50,10 @@ class ASTGeneration(TyCVisitor):
         struct_literal = ctx.structLiteral()
         return self.visit(struct_literal)
     
-    def visitFunctionCall(self, ctx:TyCParser.FunctionCallContext):
-        arg_list = self.visit(ctx.argList())
-        name = ctx.IDENTIFIER().getText()
-        return FuncCall(name, arg_list)
+    # def visitFunctionCall(self, ctx:TyCParser.FunctionCallContext):
+    #     arg_list = self.visit(ctx.argList()) if ctx.argList() else []
+    #     name = ctx.IDENTIFIER().getText()
+    #     return FuncCall(name, arg_list)
     
     def visitArgList(self, ctx:TyCParser.ArgListContext):
         expr_list = [self.visit(expr) for expr in ctx.expr()]
@@ -74,9 +74,9 @@ class ASTGeneration(TyCVisitor):
         return StructLiteral(expr_list)
     
     def visitFunctionDecl(self, ctx:TyCParser.FunctionDeclContext):
-        return_type = self.visit(ctx.returnType())
+        return_type = self.visit(ctx.returnType()) if ctx.returnType() else None
         name = ctx.IDENTIFIER().getText()
-        param_list = self.visit(ctx.paramList())
+        param_list = self.visit(ctx.paramList()) if ctx.paramList() else []
         body = self.visit(ctx.blockStm())
         return FuncDecl(return_type, name, param_list, body)
     
@@ -103,7 +103,7 @@ class ASTGeneration(TyCVisitor):
         return self.visit(ctx.varDecl())
     
     def visitBlockStmt(self, ctx:TyCParser.BlockStmtContext):
-        blockStmt = ctx.blockStmt()
+        blockStmt = ctx.blockStm()
         return self.visit(blockStmt)
     
     def visitIfStmt(self, ctx:TyCParser.IfStmtContext):
@@ -119,8 +119,8 @@ class ASTGeneration(TyCVisitor):
     
     def visitForStmt(self, ctx:TyCParser.ForStmtContext):
         init = self.visit(ctx.forInit())
-        condition = self.visit(ctx.cond) if ctx.cond else None
-        update = self.visit(ctx.update) if ctx.update else None
+        condition = self.visit(ctx.expr()) if ctx.expr() else None
+        update = self.visit(ctx.updater()) if ctx.updater() else None
         body = self.visit(ctx.statement())
         return ForStmt(init, condition, update, body)
     
@@ -129,10 +129,9 @@ class ASTGeneration(TyCVisitor):
         cases = []
         default_case = None
         for case in ctx.caseBlock():
-            if case.DEFAULT():
-                default_case = self.visit(case)
-            else:
-                cases.append(self.visit(case))
+            cases.append(self.visit(case))
+        if ctx.defaultBlock():
+            default_case = self.visit(ctx.defaultBlock())
         return SwitchStmt(expr, cases, default_case)
     
     # Visit a parse tree produced by TyCParser#ReturnStmt.
@@ -168,122 +167,316 @@ class ASTGeneration(TyCVisitor):
     def visitForInit(self, ctx:TyCParser.ForInitContext):
         if ctx.varDecl():
             return self.visit(ctx.varDecl())
-        elif ctx.expr():
-            return self.visit(ctx.expr())
+        elif ctx.assignExprHelper():
+            return self.visit(ctx.assignExprHelper())
         else:
             return None
     
     def visitCaseBlock(self, ctx:TyCParser.CaseBlockContext):
-        if ctx.DEFAULT():
-            statements = [self.visit(stmt) for stmt in ctx.statement()]
-            return DefaultStmt(statements)
+        expr = self.visit(ctx.expr())
+        stmt_list = [self.visit(stmt) for stmt in ctx.statement()]
+        return CaseStmt(expr, stmt_list)
+
+    def visitDefaultBlock(self, ctx:TyCParser.DefaultBlockContext):
+        stmt_list = [self.visit(stmt) for stmt in ctx.statement()]
+        return DefaultStmt(stmt_list)
+    
+    # Visit a parse tree produced by TyCParser#assignExprHelper.
+    def visitAssignExprHelper(self, ctx:TyCParser.AssignExprHelperContext):
+        lhs = self.visit(ctx.assignLhs())
+        rhs = self.visit(ctx.expr())
+        return AssignExpr(lhs, rhs)
+
+    # Visit a parse tree produced by TyCParser#updater.
+    def visitUpdater(self, ctx:TyCParser.UpdaterContext):
+        if ctx.assignExprHelper():
+            return self.visit(ctx.assignExprHelper())
         else:
-            case_expr = self.visit(ctx.expr())
-            statements = [self.visit(stmt) for stmt in ctx.statement()]
-            return CaseStmt(case_expr, statements)
+            return self.visit(ctx.incDecHelper())
 
-    # Visit a parse tree produced by TyCParser#RelationalExpr.
-    def visitRelationalExpr(self, ctx:TyCParser.RelationalExprContext):
-        left = self.visit(ctx.expr(0))
-        right = self.visit(ctx.expr(1))
-        op = ctx.getChild(1).getText()
-        return BinaryOp(left, op, right)
+    # Visit a parse tree produced by TyCParser#incDecHelper.
+    def visitIncDecHelper(self, ctx:TyCParser.IncDecHelperContext):
+        operand = self.visit(ctx.assignLhs())
+        op = ctx.INC().getText() if ctx.INC() else ctx.DEC().getText()
+        if ctx.getChild(0).getText() in ["++", "--"]:
+            return PrefixOp(op, operand)
+        else:
+            return PostfixOp(op, operand)
+        
+    # Visit a parse tree produced by TyCParser#expr.
+    def visitExpr(self, ctx:TyCParser.ExprContext):
+        return self.visit(ctx.assignExpr())
 
 
-    # Visit a parse tree produced by TyCParser#AssignmentExpr.
-    def visitAssignmentExpr(self, ctx:TyCParser.AssignmentExprContext):
-        lhs = self.visit(ctx.expr(0))
-        rhs = self.visit(ctx.expr(1))
+    # Visit a parse tree produced by TyCParser#AssignOp.
+    def visitAssignOp(self, ctx:TyCParser.AssignOpContext):
+        lhs = self.visit(ctx.assignLhs())
+        rhs = self.visit(ctx.assignExpr())
         return AssignExpr(lhs, rhs)
 
 
-    # Visit a parse tree produced by TyCParser#UnaryExpr.
-    def visitUnaryExpr(self, ctx:TyCParser.UnaryExprContext):
-        op = ctx.getChild(0).getText()
-        operand = self.visit(ctx.expr())
-        return PrefixOp(op, operand)
+    # Visit a parse tree produced by TyCParser#AssignPass.
+    def visitAssignPass(self, ctx:TyCParser.AssignPassContext):
+        return self.visit(ctx.logicalOrExpr())
 
 
-    # Visit a parse tree produced by TyCParser#LogicalAndExpr.
-    def visitLogicalAndExpr(self, ctx:TyCParser.LogicalAndExprContext):
-        lhs = self.visit(ctx.expr(0))
-        rhs = self.visit(ctx.expr(1))
-        op = ctx.getChild(1).getText()
-        return BinaryOp(lhs, op, rhs)
-
-
-    # Visit a parse tree produced by TyCParser#PrefixExpr.
-    def visitPrefixExpr(self, ctx:TyCParser.PrefixExprContext):
-        op = ctx.getChild(0).getText()
-        operand = self.visit(ctx.expr())
-        return PrefixOp(op, operand)
-
-
-    # Visit a parse tree produced by TyCParser#PostfixExpr.
-    def visitPostfixExpr(self, ctx:TyCParser.PostfixExprContext):
-        op = ctx.getChild(1).getText()
-        operand = self.visit(ctx.expr())
-        return PostfixOp(op, operand)
-
-
-    # Visit a parse tree produced by TyCParser#MultiplicativeExpr.
-    def visitMultiplicativeExpr(self, ctx:TyCParser.MultiplicativeExprContext):
-        lhs = self.visit(ctx.expr(0))
-        rhs = self.visit(ctx.expr(1))
-        op = ctx.getChild(1).getText()
-        return BinaryOp(lhs, op, rhs)
-
-
-    # Visit a parse tree produced by TyCParser#LogicalOrExpr.
-    def visitLogicalOrExpr(self, ctx:TyCParser.LogicalOrExprContext):
-        lhs = self.visit(ctx.expr(0))
-        rhs = self.visit(ctx.expr(1))
-        op = ctx.getChild(1).getText()
-        return BinaryOp(lhs, op, rhs)
-
-
-    # Visit a parse tree produced by TyCParser#FunctionCallExpr.
-    def visitFunctionCallExpr(self, ctx:TyCParser.FunctionCallExprContext):
-        return self.visit(ctx.functionCall())
-
-
-    # Visit a parse tree produced by TyCParser#EqualityExpr.
-    def visitEqualityExpr(self, ctx:TyCParser.EqualityExprContext):
-        lhs = self.visit(ctx.expr(0))
-        rhs = self.visit(ctx.expr(1))
-        op = ctx.getChild(1).getText()
-        return BinaryOp(lhs, op, rhs)
-
-
-    # Visit a parse tree produced by TyCParser#AdditiveExpr.
-    def visitAdditiveExpr(self, ctx:TyCParser.AdditiveExprContext):
-        lhs = self.visit(ctx.expr(0))
-        rhs = self.visit(ctx.expr(1))
-        op = ctx.getChild(1).getText()
-        return BinaryOp(lhs, op, rhs)
-
-
-    # Visit a parse tree produced by TyCParser#IdentifierExpr.
-    def visitIdentifierExpr(self, ctx:TyCParser.IdentifierExprContext):
+    # Visit a parse tree produced by TyCParser#AssignId.
+    def visitAssignId(self, ctx:TyCParser.AssignIdContext):
         return Identifier(ctx.IDENTIFIER().getText())
 
 
-    # Visit a parse tree produced by TyCParser#LiteralExpr.
-    def visitLiteralExpr(self, ctx:TyCParser.LiteralExprContext):
-        return self.visit(ctx.literal())
-        
+    # Visit a parse tree produced by TyCParser#AssignMember.
+    def visitAssignMember(self, ctx:TyCParser.AssignMemberContext):
+        obj = self.visit(ctx.postfixExpr())
+        member = ctx.IDENTIFIER().getText()
+        return MemberAccess(obj, member)
 
 
-    # Visit a parse tree produced by TyCParser#ParenExpr.
-    def visitParenExpr(self, ctx:TyCParser.ParenExprContext):
+    # Visit a parse tree produced by TyCParser#OrOp.
+    def visitOrOp(self, ctx:TyCParser.OrOpContext):
+        lhs = self.visit(ctx.logicalOrExpr())
+        rhs = self.visit(ctx.logicalAndExpr())
+        op = ctx.OR().getText()
+        return BinaryOp(lhs, op, rhs)
+
+
+    # Visit a parse tree produced by TyCParser#OrPass.
+    def visitOrPass(self, ctx:TyCParser.OrPassContext):
+        return self.visit(ctx.logicalAndExpr())
+
+
+    # Visit a parse tree produced by TyCParser#AndPass.
+    def visitAndPass(self, ctx:TyCParser.AndPassContext):
+        return self.visit(ctx.equalityExpr())
+
+
+    # Visit a parse tree produced by TyCParser#AndOp.
+    def visitAndOp(self, ctx:TyCParser.AndOpContext):
+        lhs = self.visit(ctx.logicalAndExpr())
+        rhs = self.visit(ctx.equalityExpr())
+        op = ctx.AND().getText()
+        return BinaryOp(lhs, op, rhs)
+
+
+    # Visit a parse tree produced by TyCParser#EqPass.
+    def visitEqPass(self, ctx:TyCParser.EqPassContext):
+        return self.visit(ctx.relationalExpr())
+
+
+    # Visit a parse tree produced by TyCParser#EqOp.
+    def visitEqOp(self, ctx:TyCParser.EqOpContext):
+        lhs = self.visit(ctx.equalityExpr())
+        rhs = self.visit(ctx.relationalExpr())
+        op = ctx.getChild(1).getText()
+        return BinaryOp(lhs, op, rhs)
+
+
+    # Visit a parse tree produced by TyCParser#RelOp.
+    def visitRelOp(self, ctx:TyCParser.RelOpContext):
+        lhs = self.visit(ctx.relationalExpr())
+        rhs = self.visit(ctx.additiveExpr())
+        op = ctx.getChild(1).getText()
+        return BinaryOp(lhs, op, rhs)
+
+
+    # Visit a parse tree produced by TyCParser#RelPass.
+    def visitRelPass(self, ctx:TyCParser.RelPassContext):
+        return self.visit(ctx.additiveExpr())
+
+
+    # Visit a parse tree produced by TyCParser#AddOp.
+    def visitAddOp(self, ctx:TyCParser.AddOpContext):
+        lhs = self.visit(ctx.additiveExpr())
+        rhs = self.visit(ctx.multiplicativeExpr())
+        op = ctx.getChild(1).getText()
+        return BinaryOp(lhs, op, rhs)
+
+
+    # Visit a parse tree produced by TyCParser#AddPass.
+    def visitAddPass(self, ctx:TyCParser.AddPassContext):
+        return self.visit(ctx.multiplicativeExpr())
+
+
+    # Visit a parse tree produced by TyCParser#MulOp.
+    def visitMulOp(self, ctx:TyCParser.MulOpContext):
+        lhs = self.visit(ctx.multiplicativeExpr())
+        rhs = self.visit(ctx.unaryExpr())
+        op = ctx.getChild(1).getText()
+        return BinaryOp(lhs, op, rhs)
+
+
+    # Visit a parse tree produced by TyCParser#MulPass.
+    def visitMulPass(self, ctx:TyCParser.MulPassContext):
+        return self.visit(ctx.unaryExpr())
+
+
+    # Visit a parse tree produced by TyCParser#UnaryOp.
+    def visitUnaryOp(self, ctx:TyCParser.UnaryOpContext):
+        op = ctx.getChild(0).getText()
+        operand = self.visit(ctx.unaryExpr())
+        return PrefixOp(op, operand)
+
+
+    # Visit a parse tree produced by TyCParser#PrefixOp.
+    def visitPrefixOp(self, ctx:TyCParser.PrefixOpContext):
+        op = ctx.getChild(0).getText()
+        operand = self.visit(ctx.unaryExpr())
+        return PrefixOp(op, operand)
+
+
+    # Visit a parse tree produced by TyCParser#UnaryPass.
+    def visitUnaryPass(self, ctx:TyCParser.UnaryPassContext):
+        return self.visit(ctx.postfixExpr())
+
+
+    # Visit a parse tree produced by TyCParser#PostfixOp.
+    def visitPostfixOp(self, ctx:TyCParser.PostfixOpContext):
+        operand = self.visit(ctx.postfixExpr())
+        op = ctx.getChild(1).getText()
+        return PostfixOp(op, operand)
+
+
+    # Visit a parse tree produced by TyCParser#PostfixPass.
+    def visitPostfixPass(self, ctx:TyCParser.PostfixPassContext):
+        return self.visit(ctx.primaryExpr())
+
+
+    # Visit a parse tree produced by TyCParser#MemberAccessOp.
+    def visitMemberAccessOp(self, ctx:TyCParser.MemberAccessOpContext):
+        obj = self.visit(ctx.postfixExpr())
+        member = ctx.IDENTIFIER().getText()
+        return MemberAccess(obj, member)
+
+
+    # Visit a parse tree produced by TyCParser#ParenOp.
+    def visitParenOp(self, ctx:TyCParser.ParenOpContext):
         return self.visit(ctx.expr())
 
 
-    # Visit a parse tree produced by TyCParser#MemberAccessExpr.
-    def visitMemberAccessExpr(self, ctx:TyCParser.MemberAccessExprContext):
-        member = ctx.IDENTIFIER().getText()
-        obj = self.visit(ctx.expr())
-        return MemberAccess(obj, member)
+    # Visit a parse tree produced by TyCParser#LiteralOp.
+    def visitLiteralOp(self, ctx:TyCParser.LiteralOpContext):
+        return self.visit(ctx.literal())
+
+
+    # Visit a parse tree produced by TyCParser#FuncCallOp.
+    def visitFuncCallOp(self, ctx:TyCParser.FuncCallOpContext):
+        name = ctx.IDENTIFIER().getText()
+        arg_list = self.visit(ctx.argList()) if ctx.argList() else []
+        return FuncCall(name, arg_list)
+
+
+    # Visit a parse tree produced by TyCParser#IdOp.
+    def visitIdOp(self, ctx:TyCParser.IdOpContext):
+        return Identifier(ctx.IDENTIFIER().getText())
+    
+    # # Visit a parse tree produced by TyCParser#MemberAssignmentExpr.
+    # def visitMemberAssignmentExpr(self, ctx:TyCParser.MemberAssignmentExprContext):
+    #     obj = self.visit(ctx.expr(0))
+    #     member = ctx.IDENTIFIER().getText()
+    #     lhs = MemberAccess(obj, member)
+    #     rhs = self.visit(ctx.expr(1))
+    #     return AssignExpr(lhs, rhs)
+
+    # # Visit a parse tree produced by TyCParser#AssignmentExpr.
+    # def visitAssignmentExpr(self, ctx:TyCParser.AssignmentExprContext):
+    #     lhs = Identifier(ctx.IDENTIFIER().getText())
+    #     rhs = self.visit(ctx.expr())
+    #     return AssignExpr(lhs, rhs)
+
+    # # Visit a parse tree produced by TyCParser#RelationalExpr.
+    # def visitRelationalExpr(self, ctx:TyCParser.RelationalExprContext):
+    #     left = self.visit(ctx.expr(0))
+    #     right = self.visit(ctx.expr(1))
+    #     op = ctx.getChild(1).getText()
+    #     return BinaryOp(left, op, right)
+
+    # # Visit a parse tree produced by TyCParser#UnaryExpr.
+    # def visitUnaryExpr(self, ctx:TyCParser.UnaryExprContext):
+    #     op = ctx.getChild(0).getText()
+    #     operand = self.visit(ctx.expr())
+    #     return PrefixOp(op, operand)
+
+
+    # # Visit a parse tree produced by TyCParser#LogicalAndExpr.
+    # def visitLogicalAndExpr(self, ctx:TyCParser.LogicalAndExprContext):
+    #     lhs = self.visit(ctx.expr(0))
+    #     rhs = self.visit(ctx.expr(1))
+    #     op = ctx.getChild(1).getText()
+    #     return BinaryOp(lhs, op, rhs)
+
+
+    # # Visit a parse tree produced by TyCParser#PrefixExpr.
+    # def visitPrefixExpr(self, ctx:TyCParser.PrefixExprContext):
+    #     op = ctx.getChild(0).getText()
+    #     operand = self.visit(ctx.expr())
+    #     return PrefixOp(op, operand)
+
+
+    # # Visit a parse tree produced by TyCParser#PostfixExpr.
+    # def visitPostfixExpr(self, ctx:TyCParser.PostfixExprContext):
+    #     op = ctx.getChild(1).getText()
+    #     operand = self.visit(ctx.expr())
+    #     return PostfixOp(op, operand)
+
+
+    # # Visit a parse tree produced by TyCParser#MultiplicativeExpr.
+    # def visitMultiplicativeExpr(self, ctx:TyCParser.MultiplicativeExprContext):
+    #     lhs = self.visit(ctx.expr(0))
+    #     rhs = self.visit(ctx.expr(1))
+    #     op = ctx.getChild(1).getText()
+    #     return BinaryOp(lhs, op, rhs)
+
+
+    # # Visit a parse tree produced by TyCParser#LogicalOrExpr.
+    # def visitLogicalOrExpr(self, ctx:TyCParser.LogicalOrExprContext):
+    #     lhs = self.visit(ctx.expr(0))
+    #     rhs = self.visit(ctx.expr(1))
+    #     op = ctx.getChild(1).getText()
+    #     return BinaryOp(lhs, op, rhs)
+
+
+    # # Visit a parse tree produced by TyCParser#FunctionCallExpr.
+    # def visitFunctionCallExpr(self, ctx:TyCParser.FunctionCallExprContext):
+    #     return self.visit(ctx.functionCall())
+
+
+    # # Visit a parse tree produced by TyCParser#EqualityExpr.
+    # def visitEqualityExpr(self, ctx:TyCParser.EqualityExprContext):
+    #     lhs = self.visit(ctx.expr(0))
+    #     rhs = self.visit(ctx.expr(1))
+    #     op = ctx.getChild(1).getText()
+    #     return BinaryOp(lhs, op, rhs)
+
+
+    # # Visit a parse tree produced by TyCParser#AdditiveExpr.
+    # def visitAdditiveExpr(self, ctx:TyCParser.AdditiveExprContext):
+    #     lhs = self.visit(ctx.expr(0))
+    #     rhs = self.visit(ctx.expr(1))
+    #     op = ctx.getChild(1).getText()
+    #     return BinaryOp(lhs, op, rhs)
+
+
+    # # Visit a parse tree produced by TyCParser#IdentifierExpr.
+    # def visitIdentifierExpr(self, ctx:TyCParser.IdentifierExprContext):
+    #     return Identifier(ctx.IDENTIFIER().getText())
+
+
+    # # Visit a parse tree produced by TyCParser#LiteralExpr.
+    # def visitLiteralExpr(self, ctx:TyCParser.LiteralExprContext):
+    #     return self.visit(ctx.literal())
+        
+
+
+    # # Visit a parse tree produced by TyCParser#ParenExpr.
+    # def visitParenExpr(self, ctx:TyCParser.ParenExprContext):
+    #     return self.visit(ctx.expr())
+
+
+    # # Visit a parse tree produced by TyCParser#MemberAccessExpr.
+    # def visitMemberAccessExpr(self, ctx:TyCParser.MemberAccessExprContext):
+    #     member = ctx.IDENTIFIER().getText()
+    #     obj = self.visit(ctx.expr())
+    #     return MemberAccess(obj, member)
 
 
     pass
