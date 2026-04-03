@@ -2319,7 +2319,6 @@ class TyCParser ( Parser ):
 
         def __init__(self, parser, ctx:ParserRuleContext): # actually a TyCParser.EqualityExprContext
             super().__init__(parser)
-            self.op = None # Token
             self.copyFrom(ctx)
 
         def equalityExpr(self):
@@ -2367,10 +2366,9 @@ class TyCParser ( Parser ):
                         from antlr4.error.Errors import FailedPredicateException
                         raise FailedPredicateException(self, "self.precpred(self._ctx, 2)")
                     self.state = 314
-                    localctx.op = self._input.LT(1)
                     _la = self._input.LA(1)
                     if not(_la==32 or _la==33):
-                        localctx.op = self._errHandler.recoverInline(self)
+                        self._errHandler.recoverInline(self)
                     else:
                         self._errHandler.reportMatch(self)
                         self.consume()
@@ -2409,7 +2407,6 @@ class TyCParser ( Parser ):
 
         def __init__(self, parser, ctx:ParserRuleContext): # actually a TyCParser.RelationalExprContext
             super().__init__(parser)
-            self.op = None # Token
             self.copyFrom(ctx)
 
         def relationalExpr(self):
@@ -2472,10 +2469,9 @@ class TyCParser ( Parser ):
                         from antlr4.error.Errors import FailedPredicateException
                         raise FailedPredicateException(self, "self.precpred(self._ctx, 2)")
                     self.state = 325
-                    localctx.op = self._input.LT(1)
                     _la = self._input.LA(1)
                     if not((((_la) & ~0x3f) == 0 and ((1 << _la) & 257698037760) != 0)):
-                        localctx.op = self._errHandler.recoverInline(self)
+                        self._errHandler.recoverInline(self)
                     else:
                         self._errHandler.reportMatch(self)
                         self.consume()
@@ -2514,7 +2510,6 @@ class TyCParser ( Parser ):
 
         def __init__(self, parser, ctx:ParserRuleContext): # actually a TyCParser.AdditiveExprContext
             super().__init__(parser)
-            self.op = None # Token
             self.copyFrom(ctx)
 
         def additiveExpr(self):
@@ -2573,10 +2568,9 @@ class TyCParser ( Parser ):
                         from antlr4.error.Errors import FailedPredicateException
                         raise FailedPredicateException(self, "self.precpred(self._ctx, 2)")
                     self.state = 336
-                    localctx.op = self._input.LT(1)
                     _la = self._input.LA(1)
                     if not(_la==27 or _la==28):
-                        localctx.op = self._errHandler.recoverInline(self)
+                        self._errHandler.recoverInline(self)
                     else:
                         self._errHandler.reportMatch(self)
                         self.consume()
@@ -2615,7 +2609,6 @@ class TyCParser ( Parser ):
 
         def __init__(self, parser, ctx:ParserRuleContext): # actually a TyCParser.MultiplicativeExprContext
             super().__init__(parser)
-            self.op = None # Token
             self.copyFrom(ctx)
 
         def multiplicativeExpr(self):
@@ -2676,10 +2669,9 @@ class TyCParser ( Parser ):
                         from antlr4.error.Errors import FailedPredicateException
                         raise FailedPredicateException(self, "self.precpred(self._ctx, 2)")
                     self.state = 347
-                    localctx.op = self._input.LT(1)
                     _la = self._input.LA(1)
                     if not((((_la) & ~0x3f) == 0 and ((1 << _la) & 3758096384) != 0)):
-                        localctx.op = self._errHandler.recoverInline(self)
+                        self._errHandler.recoverInline(self)
                     else:
                         self._errHandler.reportMatch(self)
                         self.consume()
@@ -2719,7 +2711,6 @@ class TyCParser ( Parser ):
 
         def __init__(self, parser, ctx:ParserRuleContext): # actually a TyCParser.UnaryExprContext
             super().__init__(parser)
-            self.op = None # Token
             self.copyFrom(ctx)
 
         def unaryExpr(self):
@@ -2748,7 +2739,6 @@ class TyCParser ( Parser ):
 
         def __init__(self, parser, ctx:ParserRuleContext): # actually a TyCParser.UnaryExprContext
             super().__init__(parser)
-            self.op = None # Token
             self.copyFrom(ctx)
 
         def unaryExpr(self):
@@ -2774,10 +2764,9 @@ class TyCParser ( Parser ):
                 localctx = TyCParser.UnaryOpContext(self, localctx)
                 self.enterOuterAlt(localctx, 1)
                 self.state = 354
-                localctx.op = self._input.LT(1)
                 _la = self._input.LA(1)
                 if not((((_la) & ~0x3f) == 0 and ((1 << _la) & 1099914280960) != 0)):
-                    localctx.op = self._errHandler.recoverInline(self)
+                    self._errHandler.recoverInline(self)
                 else:
                     self._errHandler.reportMatch(self)
                     self.consume()
@@ -2788,10 +2777,9 @@ class TyCParser ( Parser ):
                 localctx = TyCParser.PrefixOpContext(self, localctx)
                 self.enterOuterAlt(localctx, 2)
                 self.state = 356
-                localctx.op = self._input.LT(1)
                 _la = self._input.LA(1)
                 if not(_la==41 or _la==42):
-                    localctx.op = self._errHandler.recoverInline(self)
+                    self._errHandler.recoverInline(self)
                 else:
                     self._errHandler.reportMatch(self)
                     self.consume()
@@ -2836,7 +2824,6 @@ class TyCParser ( Parser ):
 
         def __init__(self, parser, ctx:ParserRuleContext): # actually a TyCParser.PostfixExprContext
             super().__init__(parser)
-            self.op = None # Token
             self.copyFrom(ctx)
 
         def postfixExpr(self):
@@ -2911,10 +2898,9 @@ class TyCParser ( Parser ):
                             from antlr4.error.Errors import FailedPredicateException
                             raise FailedPredicateException(self, "self.precpred(self._ctx, 3)")
                         self.state = 365
-                        localctx.op = self._input.LT(1)
                         _la = self._input.LA(1)
                         if not(_la==41 or _la==42):
-                            localctx.op = self._errHandler.recoverInline(self)
+                            self._errHandler.recoverInline(self)
                         else:
                             self._errHandler.reportMatch(self)
                             self.consume()

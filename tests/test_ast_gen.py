@@ -349,7 +349,7 @@ def test_054():
 
 def test_055():
     source = "void main() { for(i=0;;) {} }"
-    expected = "Program([FuncDecl(VoidType(), main, [], [ForStmt(for AssignExpr(Identifier(i) = IntLiteral(0)); None; None do BlockStmt([]))])])"
+    expected = "Program([FuncDecl(VoidType(), main, [], [ForStmt(for ExprStmt(AssignExpr(Identifier(i) = IntLiteral(0))); None; None do BlockStmt([]))])])"
     assert str(ASTGenerator(source).generate()) == expected
     assert True
 

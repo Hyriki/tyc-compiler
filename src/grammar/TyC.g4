@@ -90,46 +90,6 @@ incDecHelper:
 
 
 // 7. Expressions
-// expr:
-// 	// --- Priority 0: Atoms ---
-// 	IDENTIFIER				# IdentifierExpr
-// 	| literal				# LiteralExpr
-// 	| functionCall			# FunctionCallExpr
-// 	| LPAREN expr RPAREN	# ParenExpr
-
-// 	// --- Priority 1: Member Access (.) [Left Associative] ---
-// 	| expr MEMBER IDENTIFIER # MemberAccessExpr
-
-// 	// --- Priority 2: Postfix (++ --) [Left Associative] ---
-// 	| expr (INC | DEC) # PostfixExpr
-
-// 	// --- Priority 3: Prefix (++ --) [Right Associative] ---
-// 	| <assoc = right> (INC | DEC) expr # PrefixExpr
-
-// 	// --- Priority 4: Unary (! - +) [Right Associative] ---
-// 	| <assoc = right> (NOT | SUB | ADD) expr # UnaryExpr
-
-// 	// --- Priority 5: Multiplicative (* / %) [Left Associative] ---
-// 	| expr (MUL | DIV | MOD) expr # MultiplicativeExpr
-
-// 	// --- Priority 6: Additive (+ -) [Left Associative] ---
-// 	| expr (ADD | SUB) expr # AdditiveExpr
-
-// 	// --- Priority 7: Relational (< <= > >=) [Left Associative] ---
-// 	| expr (LT | GT | LEQ | GEQ) expr # RelationalExpr
-
-// 	// --- Priority 8: Equality (== !=) [Left Associative] ---
-// 	| expr (EQ | NEQ) expr # EqualityExpr
-
-// 	// --- Priority 9: Logical AND (&&) [Left Associative] ---
-// 	| expr AND expr # LogicalAndExpr
-
-// 	// --- Priority 10: Logical OR (||) [Left Associative] ---
-// 	| expr OR expr # LogicalOrExpr
-
-// 	// --- Priority 11: Assignment (=) [Right Associative] ---
-// 	| <assoc = right> IDENTIFIER ASSIGN expr # AssignmentExpr
-// 	| <assoc = right> expr MEMBER IDENTIFIER ASSIGN expr # MemberAssignmentExpr;
 expr: assignExpr;
 
 assignExpr: assignLhs ASSIGN assignExpr # AssignOp
@@ -144,23 +104,23 @@ logicalOrExpr: logicalOrExpr OR logicalAndExpr # OrOp
 logicalAndExpr: logicalAndExpr AND equalityExpr # AndOp
               | equalityExpr # AndPass;
 
-equalityExpr: equalityExpr op=(EQ | NEQ) relationalExpr # EqOp
+equalityExpr: equalityExpr (EQ | NEQ) relationalExpr # EqOp
             | relationalExpr # EqPass;
 
-relationalExpr: relationalExpr op=(LT | GT | LEQ | GEQ) additiveExpr # RelOp
+relationalExpr: relationalExpr (LT | GT | LEQ | GEQ) additiveExpr # RelOp
               | additiveExpr # RelPass;
 
-additiveExpr: additiveExpr op=(ADD | SUB) multiplicativeExpr # AddOp
+additiveExpr: additiveExpr (ADD | SUB) multiplicativeExpr # AddOp
             | multiplicativeExpr # AddPass;
 
-multiplicativeExpr: multiplicativeExpr op=(MUL | DIV | MOD) unaryExpr # MulOp
+multiplicativeExpr: multiplicativeExpr (MUL | DIV | MOD) unaryExpr # MulOp
                   | unaryExpr # MulPass;
 
-unaryExpr: op=(ADD | SUB | NOT) unaryExpr # UnaryOp
-         | op=(INC | DEC) unaryExpr # PrefixOp
+unaryExpr: (ADD | SUB | NOT) unaryExpr # UnaryOp
+         | (INC | DEC) unaryExpr # PrefixOp
          | postfixExpr # UnaryPass;
 
-postfixExpr: postfixExpr op=(INC | DEC) # PostfixOp
+postfixExpr: postfixExpr (INC | DEC) # PostfixOp
            | postfixExpr MEMBER IDENTIFIER # MemberAccessOp
            | primaryExpr # PostfixPass;
 
