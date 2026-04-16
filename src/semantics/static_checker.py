@@ -84,7 +84,16 @@ class StaticChecker(ASTVisitor):
     
     def visit_program(self, node: "Program", o: Any = None):
         structSeen = {}
-        funcSeen = {}
+
+        # Built in functions readInt, readFloat, readString, printInt, printFloat, printString
+        funcSeen = {
+            "readInt": FuncDecl(IntType(), "readInt", [], BlockStmt([])),
+            "readFloat": FuncDecl(FloatType(), "readFloat", [], BlockStmt([])),
+            "readString": FuncDecl(StringType(), "readString", [], BlockStmt([])),
+            "printInt": FuncDecl(VoidType(), "printInt", [Param(IntType(), "value")], BlockStmt([])),
+            "printFloat": FuncDecl(VoidType(), "printFloat", [Param(FloatType(), "value")], BlockStmt([])),
+            "printString": FuncDecl(VoidType(), "printString", [Param(StringType(), "value")], BlockStmt([]))}
+
         env = {"structs": structSeen, "functions": funcSeen, "vars": [{}]}
         for decl in node.decls:
             if isinstance(decl, StructDecl):
@@ -102,14 +111,22 @@ class StaticChecker(ASTVisitor):
 
     def visit_struct_decl(self, node: "StructDecl", o: Any = None):
         seen = {}
+        structEnv = {**o, "current_struct": node} # Add current struct to environment for member type checks
         for member in node.members: 
             if member.name in seen:
                 raise Redeclared("Member", member.name)
             seen[member.name] = member
-            self.visit(member, o)
+            member_type = self.visit(member, structEnv)
 
     def visit_member_decl(self, node: "MemberDecl", o: Any = None):
-        pass
+        if node.member_type is None:
+            raise TypeCannotBeInferred(node)
+        else:
+            # Type cannot be struct being declared
+            if isinstance(node.member_type, StructType):
+                if node.member_type.struct_name == o["current_struct"].name:
+                    raise TypeCannotBeInferred(node)
+            return self.visit(node.member_type, o)
 
     def visit_func_decl(self, node: "FuncDecl", o: Any = None):
         paramSeen = {}
@@ -124,7 +141,7 @@ class StaticChecker(ASTVisitor):
         self.visit(node.body, new_dict)
 
     def visit_param(self, node: "Param", o: Any = None):
-        pass
+        return self.visit(node.param_type, o)
 
     # Type system
     def visit_int_type(self, node: "IntType", o: Any = None):
@@ -203,15 +220,45 @@ class StaticChecker(ASTVisitor):
                 
 
     def visit_var_decl(self, node: "VarDecl", o: Any = None):
+        memberTypeList = []
         if not node.var_type:
             # print(f"Inferring type for variable '{node.name}' from initializer...")
             if node.init_value:
                 value_type = self.visit(node.init_value, o)
+                if value_type is None:
+                    raise TypeCannotBeInferred(node)
                 print(f"Inferred type for variable '{node.name}': {value_type}")
                 node.var_type = value_type
             return node
-        if node.init_value:
-            self.visit(node.init_value, o)
+        else:
+            var_type = self.visit(node.var_type, o)
+            if isinstance(var_type, VoidType):
+                raise TypeCannotBeInferred(node)
+            
+            if  type(var_type) == StructDecl:
+                # var_type is struct decl
+                for member in var_type.members:
+                    memberTypeList.append(self.visit(member, o))
+
+            if node.init_value:
+                value_type = self.visit(node.init_value, o)
+                if isinstance(value_type, VoidType):
+                    raise TypeCannotBeInferred(node)
+                
+                if isinstance(node.init_value, StructLiteral):
+                    if len(memberTypeList) != len(value_type):
+                        print(f"Struct literal initializer has wrong number of members: expected {len(memberTypeList)}, got {len(value_type)}")
+                        raise TypeMismatchInStatement(node)
+                    for member_type, val_type in zip(memberTypeList, value_type):
+                        if type(member_type) != type(val_type):
+                            print(f"Type mismatch in struct literal initializer: expected {member_type}, got {val_type}")
+                            raise TypeMismatchInStatement(node)
+                else:
+                    # For non-struct literals, check that declared type matches initializer type
+                    if var_type and value_type and type(var_type) != type(value_type):
+                        print(f"Type mismatch in variable declaration: declared type is {var_type}, initializer type is {value_type}")
+                        raise TypeMismatchInStatement(node)
+        return node
 
 
     def visit_if_stmt(self, node: "IfStmt", o: Any = None):
@@ -223,31 +270,37 @@ class StaticChecker(ASTVisitor):
             self.visit(node.else_stmt, o)
 
     def visit_while_stmt(self, node: "WhileStmt", o: Any = None):
+        whileEnv = {**o, "in_loop": True} # Add flag to indicate we are inside a loop for break/continue checks
         condition_type = self.visit(node.condition, o)
         if not isinstance(condition_type, IntType):
             raise TypeMismatchInStatement(node)
-        self.visit(node.body, o)
+        self.visit(node.body, whileEnv)
 
     def visit_for_stmt(self, node: "ForStmt", o: Any = None):
+        loopVars = {}
+        forEnv = {**o, "vars": o["vars"] + [loopVars], "in_loop": True} # Create new scope for loop variables
         if node.init:
-            self.visit(node.init, o)
+            initial = self.visit(node.init, forEnv)
+            if isinstance(initial, VarDecl):
+                loopVars[initial.name] = initial # Add loop variable to the loop scope
         if node.condition:
-            condition_type = self.visit(node.condition, o)
+            condition_type = self.visit(node.condition, forEnv)
             if not isinstance(condition_type, IntType):
                 raise TypeMismatchInStatement(node)
         if node.update:
-            self.visit(node.update, o)
-        self.visit(node.body, o)
+            self.visit(node.update, forEnv)
+        self.visit(node.body, forEnv)
 
 
     def visit_switch_stmt(self, node: "SwitchStmt", o: Any = None):
-        var_type = self.visit(node.expr, o)
+        switchEnv = {**o, "in_switch": True} # Add flag to indicate we are inside a switch for break/continue checks
+        var_type = self.visit(node.expr, switchEnv)
         if not isinstance(var_type, IntType):
             raise TypeMismatchInStatement(node)
         for case in node.cases:
-            self.visit(case, o)
+            self.visit(case, switchEnv)
         if node.default_case:
-            self.visit(node.default_case, o)
+            self.visit(node.default_case, switchEnv)
 
     def visit_case_stmt(self, node: "CaseStmt", o: Any = None):
         var_type = self.visit(node.expr, o)
@@ -257,13 +310,20 @@ class StaticChecker(ASTVisitor):
             self.visit(stmt, o)
 
     def visit_default_stmt(self, node: "DefaultStmt", o: Any = None):
-        pass
+        for stmt in node.statements:
+            self.visit(stmt, o)
+        
 
     def visit_break_stmt(self, node: "BreakStmt", o: Any = None):
-        pass
+        # Check if we are inside a loop or switch statement
+        if not o.get("in_loop", False) and not o.get("in_switch", False):
+            raise MustInLoop(node)
+
 
     def visit_continue_stmt(self, node: "ContinueStmt", o: Any = None):
-        pass
+        # Check if we are inside a loop or switch statement
+        if not o.get("in_loop", False):
+            raise MustInLoop(node)
 
     def visit_return_stmt(self, node: "ReturnStmt", o: Any = None):
         if node.expr:
@@ -277,7 +337,13 @@ class StaticChecker(ASTVisitor):
 
 
     def visit_expr_stmt(self, node: "ExprStmt", o: Any = None):
-        self.visit(node.expr, o)
+        try:
+            self.visit(node.expr, o)
+        except TypeMismatchInExpression as e:
+            # If the expression is an AssignExpr, convert to statement error
+            if isinstance(node.expr, AssignExpr):
+                raise TypeMismatchInStatement(node.expr)
+            raise
 
     # Expressions
     def visit_binary_op(self, node: "BinaryOp", o: Any = None):
@@ -306,6 +372,8 @@ class StaticChecker(ASTVisitor):
             inferred_type = left_type or right_type
             if isinstance(inferred_type, VoidType):
                 raise TypeMismatchInExpression(node)
+            if isinstance(inferred_type, StringType):
+                raise TypeCannotBeInferred(node) # Cannot infer auto from string type 
             
             # Update auto variable with inferred type
             if left_type is None and isinstance(node.left, Identifier):
@@ -324,10 +392,37 @@ class StaticChecker(ASTVisitor):
             right_type = right_type or inferred_type
         
         # Compare types
-        if isinstance(left_type, FloatType) and isinstance(right_type, IntType):
-            return FloatType()
-        elif isinstance(left_type, IntType) and isinstance(right_type, FloatType):
-            return FloatType()
+
+        if node.operator in ['+', '-', '*', '/']:
+            if isinstance(left_type, (IntType, FloatType)) and isinstance(right_type, (IntType, FloatType)):
+                if isinstance(left_type, FloatType) or isinstance(right_type, FloatType):
+                    return FloatType()
+                return IntType()
+            else:
+                print(f"Type mismatch in binary operation: left is {left_type}, right is {right_type}")
+                raise TypeMismatchInExpression(node)
+
+        if node.operator == '%':
+            if isinstance(left_type, IntType) and isinstance(right_type, IntType):
+                return IntType()
+            else:
+                print(f"Type mismatch in binary operation: left is {left_type}, right is {right_type}")
+                raise TypeMismatchInExpression(node)
+            
+        if node.operator in ['==', '!=', '<', '>', '<=', '>=']:
+            if isinstance(left_type, (IntType, FloatType)) and isinstance(right_type, (IntType, FloatType)):
+                return IntType()  # Relational operators return int (0 or 1)
+            raise TypeMismatchInExpression(node)
+
+        if node.operator in ['&&', '||']:
+            if isinstance(left_type, IntType) and isinstance(right_type, IntType):
+                return IntType()  # Logical operators return int (0 or 1)
+            raise TypeMismatchInExpression(node)
+        
+        
+            
+
+
         elif type(left_type) != type(right_type):
             print(f"Type mismatch: left is {left_type}, right is {right_type}")
             raise TypeMismatchInExpression(node)
@@ -337,12 +432,36 @@ class StaticChecker(ASTVisitor):
 
 
     def visit_prefix_op(self, node: "PrefixOp", o: Any = None):
-        self.visit(node.operand, o)
+        node_type = self.visit(node.operand, o)
+        if node.operator == '!':
+            if isinstance(node_type, IntType):
+                return IntType()
+            raise TypeMismatchInExpression(node)
+        if node.operator in ['++', '--']:
+            if (not (isinstance(node.operand, Identifier) or isinstance(node.operand, MemberAccess))):
+                raise TypeMismatchInExpression(node)
+            if isinstance(node_type, IntType):
+                return node_type
+            else:
+                print(f"Type mismatch in prefix operation: operand is {node_type}")
+                raise TypeMismatchInExpression(node)
+            
 
     def visit_postfix_op(self, node: "PostfixOp", o: Any = None):
-        self.visit(node.operand, o)
+        node_type = self.visit(node.operand, o)
+        if node.operator in ['++', '--']:
+            if (not (isinstance(node.operand, Identifier) or isinstance(node.operand, MemberAccess))):
+                raise TypeMismatchInExpression(node)
+            if isinstance(node_type, IntType):
+                return node_type
+            else:
+                print(f"Type mismatch in postfix operation: operand is {node_type}")
+                raise TypeMismatchInExpression(node)
 
     def visit_assign_expr(self, node: "AssignExpr", o: Any = None):
+        if not isinstance(node.lhs, (Identifier, MemberAccess)):
+            raise TypeMismatchInExpression(node)
+        
         left_node = self.visit(node.lhs, o)
         value = self.visit(node.rhs, o)
         if left_node is None and isinstance(node.lhs, Identifier):
@@ -356,38 +475,68 @@ class StaticChecker(ASTVisitor):
                     scope[node.lhs.name].var_type = value
                     return value  # Return the inferred type for the variable
         
-        # If left_node is not the same type as value
-        print(f"Checking assignment: left is {left_node}, right is {value}")
-        if left_node and value and type(left_node) != type(value):
-            print(f"Type mismatch in assignment: left is {left_node}, right is {value}")
-            raise TypeMismatchInStatement(node)
+        # If right-hand side is a struct literal, validate member types
+        if isinstance(node.rhs, StructLiteral):
+            if not isinstance(left_node, StructType):
+                print(f"Type mismatch in assignment: left is {left_node}, expected struct type for struct literal")
+                raise TypeMismatchInExpression(node)
+            
+            struct_name = left_node.struct_name
+            if struct_name in o["structs"]:
+                struct_decl = o["structs"][struct_name]
+                memberTypeList = []
+                for member in struct_decl.members:
+                    memberTypeList.append(self.visit(member, o))
+                
+                if len(memberTypeList) != len(value):
+                    print(f"Struct literal has wrong number of members: expected {len(memberTypeList)}, got {len(value)}")
+                    raise TypeMismatchInExpression(node)
+                
+                for member_type, val_type in zip(memberTypeList, value):
+                    if type(member_type) != type(val_type):
+                        print(f"Type mismatch in struct literal: expected {member_type}, got {val_type}")
+                        raise TypeMismatchInExpression(node)
+        else:
+            # For non-struct literals, check that left type matches right type
+            print(f"Checking assignment: left is {left_node}, right is {value}")
+            if left_node and value and type(left_node) != type(value):
+                print(f"Type mismatch in assignment: left is {left_node}, right is {value}")
+                raise TypeMismatchInExpression(node)
+            
+            # If left_node and value are struct types, check if they are the same struct
+            if left_node and value and isinstance(left_node, StructType) and isinstance(value, StructType):
+                if left_node.struct_name != value.struct_name:
+                    print(f"Struct type mismatch in assignment: left is {left_node.struct_name}, right is {value.struct_name}")
+                    raise TypeMismatchInExpression(node)
         
-        # If left_node and value are struct types, check if they are the same struct
-        if left_node and value and isinstance(left_node, StructType) and isinstance(value, StructType):
-            if left_node.struct_name != value.struct_name:
-                print(f"Struct type mismatch in assignment: left is {left_node.struct_name}, right is {value.struct_name}")
-                raise TypeMismatchInStatement(node)
         return left_node # Return the type of the left-hand side for potential inference in the block statement
 
 
     def visit_member_access(self, node: "MemberAccess", o: Any = None):
-        pass
+        obj_type = self.visit(node.obj, o)
+        if not isinstance(obj_type, StructType):
+            print(f"Type mismatch in member access: object is {obj_type}, expected struct type")
+            raise TypeMismatchInExpression(node)
+        struct_decl = self.visit(obj_type, o)
+        for member in struct_decl.members:
+            if member.name == node.member:
+                return self.visit(member.member_type, o)
+        raise TypeMismatchInExpression(node)
+        
+
 
     def visit_func_call(self, node: "FuncCall", o: Any = None):
         if node.name not in o["functions"]:
             raise UndeclaredFunction(node.name)
         func_decl = o["functions"][node.name]
-        # if len(node.args) != len(func_decl.params):
-        #     raise TypeMismatchInExpression(node)
-        #TODO
+
+        if len(node.args) != len(func_decl.params): # Number of arguments does not match number of parameters
+            raise TypeMismatchInExpression(node)
 
         for param, arg in zip(func_decl.params, node.args):
             param_type = self.visit(param.param_type, o)
             arg_type = self.visit(arg, o)
             
-                    
-            if isinstance(param_type, FloatType) and isinstance(arg_type, IntType):
-                continue  # Allow implicit int to float conversion
             if arg_type is None:
                 if not param_type is None:
                     # Infer parameter type from argument
@@ -415,7 +564,10 @@ class StaticChecker(ASTVisitor):
 
 
     def visit_struct_literal(self, node: "StructLiteral", o: Any = None):
-        pass
+        typeList = []
+        for value in node.values:
+            typeList.append(self.visit(value, o))
+        return typeList
 
     # Literals
     def visit_int_literal(self, node: "IntLiteral", o: Any = None):
