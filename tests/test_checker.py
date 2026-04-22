@@ -292,7 +292,7 @@ def test_022():
     text = x;    // Error: TypeMismatchInStatement at assignment
     f = x;       // Error: TypeMismatchInStatement at assignment (no int to float coercion in assignment)
 }"""
-    expected = "TypeMismatchInStatement(AssignExpr(Identifier(x) = Identifier(text)))"
+    expected = "TypeMismatchInStatement(ExprStmt(AssignExpr(Identifier(x) = Identifier(text))))"
     assert Checker(source).check_from_source() == expected
 
 def test_023():
@@ -313,7 +313,7 @@ def test_023():
         Person person;
         p = person;  // Error: TypeMismatchInStatement at assignment
     }"""
-    expected = "TypeMismatchInStatement(AssignExpr(Identifier(p) = Identifier(person)))"
+    expected = "TypeMismatchInStatement(ExprStmt(AssignExpr(Identifier(p) = Identifier(person))))"
     assert Checker(source).check_from_source() == expected
 
 def test_024():
@@ -337,7 +337,8 @@ void switchError() {
         case 1.5: break;
     }
 }"""
-    expected = "TypeMismatchInStatement(CaseStmt(case FloatLiteral(1.5): [BreakStmt()]))"
+    # expected = "TypeMismatchInStatement(CaseStmt(case FloatLiteral(1.5): [BreakStmt()]))"
+    expected = "TypeMismatchInStatement(SwitchStmt(switch Identifier(f) cases [CaseStmt(case FloatLiteral(1.5): [BreakStmt()])]))"
     assert Checker(source).check_from_source() == expected
 
 def test_026():
@@ -1132,7 +1133,7 @@ struct Point {
 void main() {
     Point p1;  // Valid: Point is declared before
     Point p2 = {10, 20};  // Valid: Point is declared before
-    p1 = {"1", 2};  // Valid: type mismatch in struct member initialization is not checked here (but would be caught in type checking phase)
+    p1 = {1, 2};  // Valid: type mismatch in struct member initialization is not checked here (but would be caught in type checking phase)
 }"""
     expected = "Static checking passed"
     assert Checker(source).check_from_source() == expected
@@ -1150,4 +1151,238 @@ struct Address {
     Point location;  // Valid: Point is declared before
 };"""
     expected = "Static checking passed"
+    assert Checker(source).check_from_source() == expected
+
+def test_086():
+    source = """
+    // Struct can be arguments in functions
+struct Point {
+    int x;
+    int y;
+};
+
+int distance(Point p1, Point p2) {
+    // Implementation for calculating distance
+}
+void main() {
+    Point p1 = {0, 0};
+    Point p2 = {3, 4};
+    int dist = distance(p1, p2);  // Valid: Point is declared before
+}
+"""
+    expected = "Static checking passed"
+    assert Checker(source).check_from_source() == expected
+
+def test_087():
+    source = """
+    // Struct can be arguments in functions
+struct Point {
+    int x;
+    int y;
+};
+
+int distance(Point p1, Point p2) {
+    // Implementation for calculating distance
+}
+void main() {
+    int dist = distance({0, 0}, {3, 4});  // Valid: Point is declared before
+}
+"""
+    expected = "Static checking passed"
+    assert Checker(source).check_from_source() == expected
+
+def test_088():
+    source = """
+    // Struct literal typemismatch
+    struct Point {
+        int x;
+        int y;
+    };
+    void main() {
+        Point p;
+        p = {"1", 2};  
+    }
+    """
+    expected = "TypeMismatchInExpression(StructLiteral({StringLiteral('1'), IntLiteral(2)}))"
+    assert Checker(source).check_from_source() == expected
+
+def test_089():
+    source = """
+    // Struct literal typemismatch
+    struct Point {
+        int x;
+        int y;
+    };
+    struct Person {
+        string name;
+        int age;
+        Point location;  // Valid: Point is declared before
+    };
+    void main() {
+        Person p;
+        p = {"Alice", 30, {1, 2}}; 
+    }
+    """
+    expected = "Static checking passed"
+    assert Checker(source).check_from_source() == expected
+
+def test_090():
+    source = """
+    // Multiple  struct as members
+    struct Point {
+        int x;
+        int y;
+    };
+    struct Area {
+        Point top_left;
+        Point bottom_right;
+    };
+    struct Rectangle {
+        Area area;
+        Point top_left;
+        Point bottom_right;
+    };
+    void main() {
+        //Rectangle rect;
+        Rectangle rect = {{ {0, 0}, {5, 5} }, {1, 1}, {4, 4}};
+    }
+    """
+    expected = "Static checking passed"
+    assert Checker(source).check_from_source() == expected
+
+def test_091():
+    source = """
+    // Multiple  struct as members
+    struct Point {
+        int x;
+        int y;
+    };
+    struct Area {
+        Point top_left;
+        Point bottom_right;
+    };
+    struct Rectangle {
+        Area area;
+        Point top_left;
+        Point bottom_right;
+    };
+    void printRectangle(Rectangle r) {
+    }
+    void main() {
+        //Rectangle rect;
+        //Rectangle rect = {{ {0, 0}, {5, "str"} }, {1, 1}, {4, 4}};
+        printRectangle({{ {0, 0}, {5, 5} }, {1, 1}, {4, 4}});
+    }
+    """
+    expected = "Static checking passed"
+    assert Checker(source).check_from_source() == expected
+
+def test_092():
+    """Verify c.x fails if c is still an undetermined auto variable"""
+    source = """
+    void main() {
+        auto c;
+        int a = 1;
+        c.x = a; // Error: c has no type, so .x is undefined
+    }
+    """
+    expected = "TypeMismatchInExpression(MemberAccess(Identifier(c).x))"
+    assert Checker(source).check_from_source() == expected
+
+def test_093():
+    source = """
+    struct Point {
+    int x;
+    string y;
+};
+    void main() {
+    Point p = {10, "str"};
+p.x = 30;           // assign to member x
+auto x_coord = p.x; // read member x
+printInt(p.x);      // use member x in expression
+p.y++; 
+}             // increment member x (parsed as (p.x)++)}"""
+    expected = "TypeMismatchInExpression(PostfixOp(MemberAccess(Identifier(p).y)++))"
+    assert Checker(source).check_from_source() == expected
+
+def test_094():
+    source = """
+    struct Point {
+    int x;
+    int y;
+};
+    void main() {
+    Point p1 = {10, 20};
+Point p2;
+p2 = p1;        // Copy all members: p2.x = 10, p2.y = 20
+p2.x = 30;      // Modify member
+p1 == p2;    // Error: equality not supported for structs
+    }"""
+    expected = "TypeMismatchInExpression(BinaryOp(Identifier(p1), ==, Identifier(p2)))"
+    assert Checker(source).check_from_source() == expected
+
+def test_095():
+    source = """
+    void main(){
+    int x;
+    x = "str";
+    }"""
+    expected = "TypeMismatchInStatement(ExprStmt(AssignExpr(Identifier(x) = StringLiteral('str'))))"
+    assert Checker(source).check_from_source() == expected
+
+def test_096():
+    source = """
+main(){
+    return 1;
+    return main();
+}
+"""
+    assert Checker(source).check_from_source() == "Static checking passed"
+
+def test_097():
+    source = """
+void main(){
+    1 + {1, 2};
+}
+"""
+    expected = "TypeMismatchInExpression(BinaryOp(IntLiteral(1), +, StructLiteral({IntLiteral(1), IntLiteral(2)})))"
+    assert Checker(source).check_from_source() == expected
+
+def test_098():
+    source = """
+struct Point {
+    int x;
+    int y;
+};
+
+void foo() {
+    auto a;
+    auto b;
+    Point p = {a , b};
+    a = b = 1;
+}
+"""
+    expected = "Static checking passed"
+    assert Checker(source).check_from_source() == expected
+
+def test_099():
+    source = """
+func() { auto a; return a;}
+void main() {
+    auto a = func();
+    float b = a;
+}
+"""
+    expected = "TypeCannotBeInferred(ReturnStmt(return Identifier(a)))"
+    assert Checker(source).check_from_source() == expected
+
+def test_100():
+    source = """
+void main() {
+    auto a;
+    if (a) {}
+    float b = a;
+}
+"""
+    expected = "TypeMismatchInStatement(VarDecl(FloatType(), b = Identifier(a)))"
     assert Checker(source).check_from_source() == expected
